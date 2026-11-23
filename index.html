@@ -107,7 +107,7 @@
             🔊 聽標準發音
           </button>
           <button type="button" id="btnSyllableSpeak" onclick="speakBySyllables()" class="jelly-btn px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm sm:text-base shadow-sm flex items-center gap-1.5">
-            🐢 拆音節慢讀 (逐段停頓)
+            🐢 慢速跟讀 (音節同步提示)
           </button>
           <button type="button" onclick="giveSocraticHint()" class="jelly-btn px-3.5 py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs sm:text-sm border border-amber-300">
             💡 AI 拼讀提示
@@ -209,6 +209,7 @@
             <option value="801">801 班（國二）</option>
             <option value="802">802 班（國二）</option>
             <option value="803">803 班（國二）</option>
+            <option value="909">909 班（國三）</option>
           </select>
         </div>
 
@@ -628,7 +629,7 @@ function giveSocraticHint() {
     box.innerHTML = `💡 <b>提示 2（首尾與音節長度）：</b>字首是 <b>「${w.en[0]}」</b>，字尾是 <b>「${w.en[w.en.length - 1]}」</b>，各音節字母數為 <b>${sylParts.map(p => p.length).join(" - ")}</b>。`;
   } else {
     const masked = sylParts.map(p => p[0] + "_".repeat(Math.max(0, p.length - 1))).join(" - ");
-    box.innerHTML = `💡 <b>提示 3（音節開頭字母）：</b>依音節提示為 <span class="font-mono text-base text-blue-700">${masked}</span>，搭配「🐢 拆音節慢讀」聽聽看！`;
+    box.innerHTML = `💡 <b>提示 3（音節開頭字母）：</b>依音節提示為 <span class="font-mono text-base text-blue-700">${masked}</span>，搭配「🐢 慢速跟讀」聽聽看！`;
   }
 }
 
@@ -644,7 +645,7 @@ function nextWord() {
   renderCurrentWord();
 }
 
-// ================= 7. 語音發音引擎（整字＋逐音節停頓同步發光） =================
+// ================= 7. 語音發音引擎（整字標準音＋0.55倍慢速跟讀同步發光） =================
 function speakUtterance(text, rate = 0.95) {
   return new Promise(resolve => {
     const u = new SpeechSynthesisUtterance(text);
@@ -671,16 +672,22 @@ async function speakBySyllables() {
   const w = getCurrentWord();
   const sylParts = w.syl.split("-");
 
+  // 1. 先以 0.55 倍慢速朗讀「完整單字」（確保發音 100% 準確不亂唸）
+  const slowSpeakPromise = speakUtterance(w.en, 0.55);
+
+  // 2. 同步依音節數量讓色塊依序發光提示節奏
+  const stepMs = Math.max(320, Math.min(550, Math.round(1100 / sylParts.length)));
   for (let i = 0; i < sylParts.length; i++) {
     const grp = document.getElementById(`syl-group-${i}`);
     if (grp) grp.classList.add("syl-speaking");
-    await speakUtterance(sylParts[i], 0.78);
+    await sleep(stepMs);
     if (grp) grp.classList.remove("syl-speaking");
-    if (i < sylParts.length - 1) {
-      await sleep(520);
-    }
   }
-  await sleep(650);
+
+  await slowSpeakPromise;
+  await sleep(450);
+
+  // 3. 最後再以正常語速朗讀一次加深印象
   await speakUtterance(w.en, 0.92);
 }
 
@@ -697,7 +704,7 @@ function blobToBase64(blob) {
   });
 }
 
-// 降採樣至 16kHz 單聲道 WAV（檔案超小、iPad Safari / Chrome / Edge 全相容）
+// 降採樣至 16kHz 單聲道 WAV（檔案超小、iPhone / iPad Safari / Chrome / Edge 全相容）
 function encodeWav16k(floatChunks, inputSampleRate) {
   const totalLen = floatChunks.reduce((acc, b) => acc + b.length, 0);
   const merged = new Float32Array(totalLen);
@@ -888,13 +895,13 @@ async function startMainRecording() {
       resultBox.innerHTML = `
         <div class="text-rose-700 space-y-1">
           <div>⚠️ <b>目前在預覽視窗中，瀏覽器安全機制會封鎖麥克風！</b></div>
-          <div class="text-slate-600">👉 請點右上角下載此 HTML 檔案，上傳到您的 <b>GitHub Pages（https://g9641723.github.io/ 網址）</b> 開啟後，麥克風錄音與雲端同步即可正常運作。</div>
+          <div class="text-slate-600">👉 請用瀏覽器開啟正式網址 <b>https://g9641723-dev.github.io/phonics-1-3-/</b>，麥克風錄音與雲端同步即可正常運作。</div>
         </div>`;
     } else {
       resultBox.innerHTML = `
         <div class="text-rose-700 space-y-1">
           <div>⚠️ <b>無法啟動麥克風（${err.name || "權限受限"}）</b></div>
-          <div class="text-slate-600">請檢查網址列左側的 🔒 圖示，確認已開啟「麥克風：允許」，並透過 <b>https://</b> 網址開啟本網頁。</div>
+          <div class="text-slate-600">請檢查網址列左側的 🔒 或「大小」圖示，確認已開啟「麥克風：允許」，並確認設備具備麥克風硬體。</div>
         </div>`;
     }
   } finally {
@@ -1044,7 +1051,7 @@ async function startWallInlineRecord(wordId) {
     const statusBanner = document.getElementById("speechResultBox");
     if (statusBanner) {
       statusBanner.style.display = "block";
-      statusBanner.innerHTML = `<span class="text-rose-700">⚠️ 目前環境無法開啟麥克風（若在預覽框中請先下載並上傳至 GitHub Pages 後再測試）。</span>`;
+      statusBanner.innerHTML = `<span class="text-rose-700">⚠️ 目前環境無法開啟麥克風（請確認使用 https://g9641723-dev.github.io/phonics-1-3-/ 開啟並允許麥克風權限）。</span>`;
     }
   } finally {
     banner.style.display = "none";
